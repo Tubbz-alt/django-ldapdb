@@ -33,6 +33,7 @@
 import datetime
 import ldap
 
+from django.conf import settings
 from django.db import connections, router
 from django.db.models import Q
 from django.test import TestCase
@@ -436,6 +437,125 @@ class ScopedTestCase(BaseTestCase):
         g2 = ScopedGroup.objects.get(name="scopedgroup")
         self.assertEquals(g2.name, u'scopedgroup')
         self.assertEquals(g2.gid, 5000)
+
+
+class BindAsTestCase(BaseTestCase):
+    def setUp(self):
+        super(BindAsTestCase, self).setUp()
+
+        u = LdapUser()
+        u.last_name = "User"
+        u.full_name = "Test User"
+
+        u.group = 1000
+        u.home_directory = "/home/foouser"
+        u.uid = 2000
+        u.username = "foouser"
+        u.password = "foopassword"
+        u.save()
+
+    def test_bind_as_modifies_settings(self):
+        bound_user = LdapUser.bind_as(
+            alias='foouser_test',
+            dn='uid=foouser,ou=people,dc=nodomain',
+            password='foopassword')
+        try:
+            self.assertTrue('foouser_test' in settings.DATABASES)
+            db = settings.DATABASES['foouser_test']
+            self.assertEqual(db['USER'], 'uid=foouser,ou=people,dc=nodomain')
+            self.assertEqual(db['PASSWORD'], 'foopassword')
+        finally:
+            bound_user.restore_alias()
+
+    def test_bind_as_supports_username(self):
+        bound_user = LdapUser.bind_as(
+            alias='foouser_username',
+            username='foouser',
+            password='foopassword')
+        try:
+            db = settings.DATABASES['foouser_username']
+            self.assertEqual(db['USER'], 'uid=foouser,ou=people,dc=nodomain')
+        finally:
+            bound_user.restore_alias()
+
+    def test_bind_as_with_correct_password(self):
+        bound_user = LdapUser.bind_as(
+            alias='foouser_correct',
+            username='foouser',
+            password='foopassword')
+        try:
+            bound_user.objects.get(username='foouser')
+        finally:
+            bound_user.restore_alias()
+
+    def test_bind_as_with_wrong_password(self):
+        bound_user = LdapUser.bind_as(
+            alias='foouser_wrong',
+            username='foouser',
+            password='barpassword')
+        try:
+            self.assertRaises(ldap.INVALID_CREDENTIALS,
+                              bound_user.objects.get,
+                              username='foouser')
+        finally:
+            bound_user.restore_alias()
+
+    def test_bind_as_restore_alias_removes_db(self):
+        bound_user = LdapUser.bind_as(
+            alias='restore_alias',
+            username='foouser',
+            password='foopassword')
+        bound_user.restore_alias()
+        self.assertFalse('restore_alias' in settings.DATABASES)
+
+    def test_bind_as_restore_alias_restores_db(self):
+        initial_content = {
+            'USER': 'test',
+            'PASSWORD': 'test',
+        }
+        settings.DATABASES['restore_alias2'] = initial_content
+        bound_user = LdapUser.bind_as(
+            alias='restore_alias2',
+            username='foouser',
+            password='foopassword')
+        bound_user.restore_alias()
+        self.assertEqual(settings.DATABASES['restore_alias2'],
+                         initial_content)
+
+    def test_bind_as_restore_alias_closes_connection(self):
+        bound_user = LdapUser.bind_as(
+            alias='restore_alias_conn',
+            username='foouser',
+            password='foopassword')
+        try:
+            bound_user.objects.get(username='foouser')
+        finally:
+            bound_user.restore_alias()
+        self.assertFalse(connections['restore_alias_conn'].connection)
+
+    def test_context_manager_calls_restore_alias(self):
+        bound_user = LdapUser.bind_as(
+            alias='context_manager',
+            username='foouser',
+            password='foopassword')
+        with bound_user.objects.get(username='foouser') as u:
+            pass
+        self.assertFalse('context_manager' in settings.DATABASES)
+
+    def test_plain_alias_does_not_modify_settings(self):
+        initial_content = {
+            'USER': 'test',
+            'PASSWORD': 'test',
+        }
+        settings.DATABASES['plain_alias'] = dict(initial_content)
+        bound_user = LdapUser.bind_as(alias='plain_alias')
+        try:
+            self.assertEqual(settings.DATABASES['plain_alias']['USER'],
+                             initial_content['USER'])
+            self.assertEqual(settings.DATABASES['plain_alias']['PASSWORD'],
+                             initial_content['PASSWORD'])
+        finally:
+            bound_user.restore_alias()
 
 
 class AdminTestCase(BaseTestCase):
