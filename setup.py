@@ -12,6 +12,7 @@ setup(
     author="Jeremy Laine",
     author_email="jeremy.laine@bolloretelecom.eu",
     packages=['ldapdb', 'ldapdb.backends', 'ldapdb.backends.ldap', 'ldapdb.models'],
+    test_suite='tests.runtests.runtests',
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Environment :: Web Environment",
