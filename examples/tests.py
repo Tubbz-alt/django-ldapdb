@@ -85,7 +85,7 @@ foouser = ('uid=foouser,ou=people,dc=nodomain', {
         '\xfd\x00\x01\xff\xd9'],
     'uidNumber': ['2000'], 'gidNumber': ['1000'], 'sn': ['Us\xc3\xa9r'],
     'homeDirectory': ['/home/foouser'], 'givenName': ['F\xc3\xb4o'],
-    'uid': ['foouser'], 'birthday': ['1982-06-12'],
+    'uid': ['foouser'], 'birthday': ['1982-06-12'], 'latitude': ['3.14'],
     'userPassword': ['foopassword']})
 
 
@@ -388,6 +388,7 @@ class UserTestCase(TestCase):
                           '\x02\x11\x03\x11\x00?\x00\x9d\xf29wU5Q\xd6\xfd\x00'
                           '\x01\xff\xd9')
         self.assertEquals(u.date_of_birth, datetime.date(1982, 6, 12))
+        self.assertEquals(u.latitude, 3.14)
 
         self.assertRaises(LdapUser.DoesNotExist, LdapUser.objects.get,
                           username='does_not_exist')
